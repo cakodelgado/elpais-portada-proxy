@@ -84,14 +84,7 @@ export default async function handler(req, res) {
 
     // URL proxificada (para que el email no tenga problemas de hotlinking)
     // Reemplaza TUDOMINIO por tu URL de Vercel: ej. https://mi-proxy.vercel.app
-    const proxyBase = process.env.PROXY_BASE_URL || `https://${process.env.VERCEL_URL}` || 'https://elpais-portada-proxy.vercel.app';
-```
-
-Esto hace que Vercel use su propia URL automáticamente sin que tengas que configurar nada. Guarda el cambio (commit) y en 1 minuto se redeploya solo.
-
-Luego prueba de nuevo:
-```
-https://elpais-portada-proxy.vercel.app/api/portada?day=23&month=2&year=1981
+    const proxyBase = process.env.PROXY_BASE_URL || 'https://elpais-portada-proxy.vercel.app';
     const imageUrlProxy = `${proxyBase}/api/portada?imageUrl=${encodeURIComponent(imageUrlFound)}`;
 
     return res.status(200).json({
