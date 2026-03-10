@@ -69,7 +69,7 @@ export default async function handler(req, res) {
     const html = await response.text();
 
     // Extraer las imágenes en alta resolución (/images/) que aparecen en la página
-    const regex = /img\/web\/images\/[^"'\s]+\.jpg/gi;
+    const regex = /img\/web\/gallery\/[^"'\s]+\.jpg/gi;
     const matches = [...html.matchAll(regex)].map(m => m[0]);
 
     if (!matches.length) {
