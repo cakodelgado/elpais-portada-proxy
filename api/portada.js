@@ -68,8 +68,8 @@ export default async function handler(req, res) {
 
     const html = await response.text();
 
-    // Extraer todas las imágenes de galería que aparecen en la página
-    const regex = /img\/web\/gallery\/[^"'\s]+\.jpg/gi;
+    // Extraer las imágenes en alta resolución (/images/) que aparecen en la página
+    const regex = /img\/web\/images\/[^"'\s]+\.jpg/gi;
     const matches = [...html.matchAll(regex)].map(m => m[0]);
 
     if (!matches.length) {
@@ -80,11 +80,12 @@ export default async function handler(req, res) {
     }
 
     // La primera coincidencia es la portada del día
-    const imageUrlFound = `https://www.portadasdeelpais.com/${matches[0]}`;
+    // gallery → images para obtener alta resolución
+    const imageUrlFound = `https://www.portadasdeelpais.com/${matches[0].replace('img/web/gallery/', 'img/web/images/')}`;
 
     // URL proxificada (para que el email no tenga problemas de hotlinking)
     // Reemplaza TUDOMINIO por tu URL de Vercel: ej. https://mi-proxy.vercel.app
-    const proxyBase = process.env.PROXY_BASE_URL || 'https://elpais-portada-proxy.vercel.app';
+    const proxyBase = process.env.PROXY_BASE_URL || 'https://TUDOMINIO.vercel.app';
     const imageUrlProxy = `${proxyBase}/api/portada?imageUrl=${encodeURIComponent(imageUrlFound)}`;
 
     return res.status(200).json({
