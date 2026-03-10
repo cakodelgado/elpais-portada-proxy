@@ -1,0 +1,11 @@
+{
+  "name": "elpais-portada-proxy",
+  "version": "1.0.0",
+  "description": "Proxy para portadasdeelpais.com - Campaña Playmo / El País Feria del Libro",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
