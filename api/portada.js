@@ -1,100 +1,67 @@
-/**
- * PROXY - Portada El País
- * Deploy en Vercel: pega esta carpeta /api en tu proyecto Vercel.
- * Endpoint: GET /api/portada?day=15&month=2&year=2024
- *
- * También sirve la imagen como proxy para evitar hotlinking bloqueado:
- * GET /api/portada?imageUrl=https://www.portadasdeelpais.com/img/...
- */
-
 export default async function handler(req, res) {
-  // CORS: permite llamadas desde cualquier origen (o restringe a tu dominio Playmo)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  const { day, month, year, imageUrl } = req.query;
-
-  // ── Modo proxy de imagen ──────────────────────────────────────────────────
-  // Si pasan imageUrl, devolvemos la imagen directamente (para el email)
+  // Modo proxy de imagen (para mostrar en email sin problemas de hotlinking)
+  const { imageUrl } = req.query;
   if (imageUrl) {
     try {
-      const imgResponse = await fetch(imageUrl, {
-        headers: {
-          'Referer': 'https://www.portadasdeelpais.com/',
-          'User-Agent': 'Mozilla/5.0'
-        }
-      });
-      if (!imgResponse.ok) {
-        return res.status(404).json({ error: 'Imagen no encontrada' });
-      }
-      const contentType = imgResponse.headers.get('content-type') || 'image/jpeg';
-      res.setHeader('Content-Type', contentType);
+      const response = await fetch(imageUrl);
+      if (!response.ok) return res.status(404).json({ error: 'Imagen no encontrada' });
+      const buffer = await response.arrayBuffer();
+      res.setHeader('Content-Type', response.headers.get('content-type') || 'image/jpeg');
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      const buffer = await imgResponse.arrayBuffer();
       return res.send(Buffer.from(buffer));
-    } catch (err) {
-      return res.status(500).json({ error: 'Error al obtener imagen', detail: err.message });
+    } catch (e) {
+      return res.status(500).json({ error: 'Error al obtener imagen' });
     }
   }
 
-  // ── Modo búsqueda de portada por fecha ───────────────────────────────────
+  // Modo búsqueda de portada por fecha
+  const day   = parseInt(req.query.day,   10);
+  const month = parseInt(req.query.month, 10);
+  const year  = parseInt(req.query.year,  10);
+
   if (!day || !month || !year) {
-    return res.status(400).json({ error: 'Parámetros requeridos: day, month, year' });
+    return res.status(400).json({ error: 'Faltan parámetros: day, month, year' });
   }
 
-  const url =
-    `https://www.portadasdeelpais.com/webpr_index.jsp` +
-    `?filter_query=datefilter&gal_0=el_pais` +
-    `&select_year=${year}&select_month=${month}` +
-    `&select_from=${day}&select_to=${day}`;
+  const yyyy    = String(year);
+  const mm      = String(month).padStart(2, '0');
+  const dd      = String(day).padStart(2, '0');
+  const yyyymmdd = yyyy + mm + dd;
 
+  // URLs construidas directamente — no hay scraping
+  const jpgUrl = `https://srv00.epimg.net/pdf/elpais/snapshot/${yyyy}/${mm}/elpais/${yyyymmdd}Big.jpg`;
+  const pdfUrl = `https://srv00.epimg.net/pdf/elpais/1aPagina/${yyyy}/${mm}/ep-${yyyymmdd}.pdf`;
+
+  // Verificar que la portada existe (HEAD request al JPG)
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://www.portadasdeelpais.com/webpr_main.jsp',
-        'Accept': 'text/html,application/xhtml+xml'
-      }
-    });
-
-    if (!response.ok) {
-      return res.status(502).json({ error: 'Error al contactar portadasdeelpais.com' });
-    }
-
-    const html = await response.text();
-
-    // Extraer las imágenes en alta resolución (/images/) que aparecen en la página
-    const regex = /img\/web\/gallery\/[^"'\s]+\.jpg/gi;
-    const matches = [...html.matchAll(regex)].map(m => m[0]);
-
-    if (!matches.length) {
+    const check = await fetch(jpgUrl, { method: 'HEAD' });
+    if (!check.ok) {
       return res.status(404).json({
         error: 'No se encontró portada para esta fecha',
-        fecha: `${day}/${month}/${year}`
+        fecha: `${dd}/${mm}/${yyyy}`
       });
     }
-
-    // La primera coincidencia es la portada del día
-    // gallery → images para obtener alta resolución
-    const imageUrlFound = `https://www.portadasdeelpais.com/${matches[0].replace('img/web/gallery/', 'img/web/images/')}`;
-
-    // URL proxificada (para que el email no tenga problemas de hotlinking)
-    // Reemplaza TUDOMINIO por tu URL de Vercel: ej. https://mi-proxy.vercel.app
-    const proxyBase = process.env.PROXY_BASE_URL || 'https://TUDOMINIO.vercel.app';
-    const imageUrlProxy = `${proxyBase}/api/portada?imageUrl=${encodeURIComponent(imageUrlFound)}`;
-
-    return res.status(200).json({
-      fecha: `${day}/${month}/${year}`,
-      imageUrl: imageUrlFound,         // URL directa (para mostrar en pantalla)
-      imageUrlProxy: imageUrlProxy,    // URL proxificada (para el email transaccional)
-    });
-
-  } catch (err) {
-    return res.status(500).json({ error: 'Error interno', detail: err.message });
+  } catch (e) {
+    return res.status(500).json({ error: 'Error al verificar la portada' });
   }
+
+  // Comprobar si hay PDF disponible
+  let pdfDisponible = false;
+  try {
+    const pdfCheck = await fetch(pdfUrl, { method: 'HEAD' });
+    pdfDisponible = pdfCheck.ok;
+  } catch (e) { /* sin PDF */ }
+
+  const proxyBase = `https://${req.headers.host}`;
+
+  return res.status(200).json({
+    fecha:         `${dd}/${mm}/${yyyy}`,
+    imageUrl:      jpgUrl,                  // JPG alta res para mostrar en form y email
+    pdfUrl:        pdfDisponible ? pdfUrl : null,  // PDF si está disponible
+    imageUrlProxy: `${proxyBase}/api/portada?imageUrl=${encodeURIComponent(jpgUrl)}`
+  });
 }
